@@ -1,0 +1,287 @@
+library(WGCNA)
+library(tidyverse)
+library(magrittr) 
+library(limma)
+library(gplots)
+library(reshape)
+library(rtracklayer)
+library(fs)
+library(ggbiplot)
+library(DESeq2)
+
+setwd("~/bio")
+
+
+
+mean(wing_data$TPM...23)         #TPM値が全部0かどうかチェック
+
+#which(wing_data$gene_id == "HMEL016675")   #CYP405A4
+#which(wing_data$gene_id == "HMEL008350")   #Hm_GAPDH
+
+
+
+#正規化：DEseq
+count = read.csv("gene_count_matrix.csv", sep = ",", row.names = 1) 
+count = filter_all(count, any_vars(.>0)) %>%
+  select(!c(8, 15, 17, 23, 28, 29, 33, 34, 37, 39, 41, 45, 47, 48, 53, 
+            56, 58, 59, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 86, 91, 98, 101, 102, 103, 104, 105, 106,
+            109, 111, 112, 113))
+View(count)
+#trimed_counts = neqc(counts)
+
+heliconius = read_csv("gene_count_matrix.csv")
+heliconius = filter_all(heliconius, any_vars(.>0)) %>%
+  select(!c(9, 16, 18, 24, 29, 30, 34, 35, 38, 40, 42, 46, 48, 49, 54, 
+            57, 59, 60, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 87, 92, 99, 102, 103, 104, 105, 106, 107,
+            110, 112, 113, 114))
+View(heliconius)
+
+#PCA
+heliconius_pca = heliconius %>%
+  pivot_longer(2:74, names_to = "data_num", values_to = "TPM") %>%
+  pivot_wider(names_from = gene_id, values_from = TPM) %>%
+  drop_na() %>%
+  column_to_rownames("data_num")
+View(heliconius_pca)
+prcomp_res = heliconius_pca %>%
+  dplyr::select(where(~ length(unique(.x)) > 1L)) %>%
+  prcomp(scale = TRUE)
+summary(prcomp_res)
+ggbiplot(prcomp_res, obs.scale = 1, var.scale = 1,
+         ellipse = TRUE, circle = TRUE, var.axes = FALSE)
+#groups = c("2", "whole", "whole", "1", "n", "1", "n",
+#           "1", "1", "1", "1", "2", "distal", "anterior", "2", "whole",
+#           "larval", "distal", "posterior", "anterior")
+groups = c("1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1",    #14
+           "2",    #1
+           "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3",   #16
+           "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4",  #32
+           "5", "5", "5", "5", "5", "5", "5", "5", "5", "5",   #10
+           "6", "6", "6", "6", "6", "6", "6", "6", "6", "6",   #10
+           "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7")   #31
+groups = c("gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", 
+           "ovary", "ovary", "ovary", "ovary",    #13
+           "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain",   #12
+           "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing",  #20
+           #           "ab_f", "ab_m", "ab_m", "ab_m", "ab_m",    #5
+           "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-2", "gut_larva-2", "gut_larva-2", "gut_larva-2", "gut_larva-2",    #10
+           "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing")   #18
+ggbiplot(prcomp_res, obs.scale = 1, var.scale = 1, groups = groups,
+         ellipse = TRUE, circle = TRUE, var.axes = FALSE) + theme_bw()
+
+
+
+#数合ってるver.
+coldata = data.frame(
+  condition = c( "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1", "1",    #13
+                 "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3", "3",  #12
+                 "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", "4",  #20
+                 "5", "5", "5", "5", "5",    #5
+                 "6", "6", "6", "6", "6", "6", "6", "6", "6", "6",    #10
+                 "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7", "7")   #18
+)
+
+
+coldata = data.frame(
+  condition =c("gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f", "gut_f",  #9
+               "ovary", "ovary", "ovary", "ovary",    #4
+               "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain", "eye&brain",   #12
+               "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing",  #20
+               #           "ab_f", "ab_m", "ab_m", "ab_m", "ab_m",    #5
+               "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-1", "gut_larva-2", "gut_larva-2", "gut_larva-2", "gut_larva-2", "gut_larva-2",    #10
+               "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing", "wing")   #18
+)
+
+dds = DESeqDataSetFromMatrix(countData = count, colData = coldata, design = ~ condition)
+dds <- dds[rowSums(counts(dds)) >= 10,]
+dds$condition <- relevel(dds$condition, ref = "gut_f")
+dds = DESeq(dds)
+View(dds)
+res = results(dds)
+res
+
+normalized_counts <- counts(dds, normalized=TRUE)
+head(normalized_counts)
+
+#書き出し
+write.csv(as.data.frame(normalized_counts), file="normalized_heliconius_counts_2.csv")
+normalized_heliconius_data = read_csv("normalized_heliconius_counts_2.csv")
+View(normalized_heliconius_data)
+
+normalized_gut_data = normalized_heliconius_data %>%
+  select(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60))
+View(normalized_gut_data)
+
+#正規化済みデータの読み込み：
+#データの転置
+heliconius_data_t = normalized_gut_data %>%
+  pivot_longer(2:19, names_to = "data_num", values_to = "TPM") %>%
+  pivot_wider(names_from = ...1, values_from = TPM) %>%
+  drop_na() %>%
+  column_to_rownames("data_num")
+View(heliconius_data_t)
+
+
+#最適な Soft Threshold を探す
+powers = c(c(1:10), seq(from = 12, to=30, by=2))
+sft = pickSoftThreshold(heliconius_data_t, powerVector = powers, networkType = "signed", verbose = 5) #時間かかる
+
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
+     main = paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     labels=powers,cex=0.9,col="red")
+abline(h=0.90,col="red")
+
+plot(sft$fitIndices[,1], sft$fitIndices[,5],
+     xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
+     main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=1,col="red")
+
+
+#TOMに変換
+power = sft$powerEstimate
+adjacency = adjacency(heliconius_data_t, power = power, type="signed")
+TOM = TOMsimilarity(adjacency,TOMType = "signed")
+dissTOM = 1-TOM
+
+#Scale Free 性の確認
+k=as.vector(apply(adjacency, 2, sum, na.rm=T))
+hist(k)
+
+scaleFreePlot(k, main="Check scale free topology\n")
+
+#階層的クラスタリング
+geneTree = hclust(as.dist(dissTOM), method = "average")
+plot(geneTree, xlab="", sub="", main = "Gene clustering on TOM-based dissimilarity",
+     labels = FALSE, hang = 0.04)
+
+deepSplit <- 4
+minModuleSize <- 30
+
+dynamicMods <- cutreeDynamic(dendro = geneTree, 
+                             distM = dissTOM,
+                             deepSplit = deepSplit, 
+                             pamStage = TRUE,
+                             pamRespectsDendro = TRUE,
+                             minClusterSize = minModuleSize)
+print(table(dynamicMods))
+
+dynamicColors <- labels2colors(dynamicMods)
+table(dynamicColors)
+
+
+plotDendroAndColors(dendro = geneTree, 
+                    colors = dynamicColors, 
+                    groupLabels = "Dynamic Tree Cut",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05,
+                    main = "Gene dendrogram and module colors")
+
+View(MEList)
+MEList <- moduleEigengenes(heliconius_data_t, colors = dynamicColors)
+MEs <- MEList$eigengenes
+#MEs = MEs %>%
+#  select(!c(MEgrey))
+MEDiss <- 1-cor(MEs)
+METree <- hclust(as.dist(MEDiss), method = "average")
+plot(METree, main = "Clustering of module eigengenes",
+     xlab = "", sub = "")
+MEDissThres <- 0.15
+abline(h=MEDissThres, col = "red")
+
+
+merge <- mergeCloseModules(heliconius_data_t, dynamicColors, cutHeight = MEDissThres, verbose = 3)
+mergedColors <- merge$colors
+mergedMEs <- merge$newMEs
+plotDendroAndColors(geneTree, cbind(dynamicColors, mergedColors),c("Dynamic Tree Cut", "Merged dynamic"),dendroLabels = FALSE, hang = 0.03,addGuide = TRUE, guideHang = 0.05)
+
+
+# cytoscape 用にデータを成形
+gene_modules = merge$colors
+module_genes = lapply(unique(gene_modules), function(module_color){
+  which(gene_modules == module_color)
+})
+
+edges = as.data.frame(as.table(dissTOM))
+View(edges)
+colnames(edges) = c("gene_1", "gene_2", "weight")
+
+write.table(edges, file = "gut_network_data.txt", sep = "\t", quote = FALSE, row.names=FALSE)
+
+module_nodes = lapply(seq_along(module_genes), function(module_index){
+  paste("module", module_index, "_", module_genes[[module_index]], sep = "")})
+
+all_nodes = unlist(module_nodes)
+
+write.table(all_nodes, file = "gut_node_list.txt", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+
+dynamicColors[48]
+which(normalized_gut_data$...1 == "HMEL016675|CYP405A4")#CYP405A4
+dynamicColors[6390]
+which(normalized_gut_data$...1 == "HMEL013081|CYP332A1")
+dynamicColors[796]
+which(normalized_gut_data$...1 == "HMEL015202")
+
+
+# dataExpr、moduleColors、TOMなどの変数が定義され、計算されていると仮定します
+# 可視化するモジュールを選択
+modules = "steelblue";  # 必要に応じて異なるモジュールの色を選択できます
+probes = names(heliconius_data_t)
+inModule = (dynamicColors == modules)
+modProbes = probes[inModule]
+# 対応するトポロジカルオーバーラップを選択
+modTOM = TOM[inModule, inModule]
+dimnames(modTOM) = list(modProbes, modProbes)
+# 可視化するノードの上限数を選択、例えばトップ30
+nTop = 150
+IMConn = softConnectivity(heliconius_data_t[, modProbes])
+top = (rank(-IMConn) <= nTop)
+# VisANTが読み取ることができるネットワークエッジリストファイルをエクスポート
+vis = exportNetworkToVisANT(modTOM[top, top],
+                            file = paste("VisANTInput-", modules, "-top200.txt", sep=""),
+                            weighted = TRUE,
+                            threshold = 0)
+# 必要に応じて、モジュール全体のネットワークをエクスポートすることも可能
+vis = exportNetworkToVisANT(modTOM,
+                            file = paste("VisANTInput-", modules, ".txt", sep=""),
+                            weighted = TRUE,
+                            threshold = 0)
+
+export = read.table("VisANTInput-lightpink4dynamic-top100.txt")
+View(export)
+
+ch_export_405 = export %>%
+  filter(V1 == "HMEL016675|CYP405A4")
+View(ch_export_405)
+
+ch_export_332 = export %>%
+  filter(V1 == "HMEL013081|CYP332A1")
+View(ch_export_332)
+
+
+
+#Jia さんから教えてもらったコード（hub gene の出力）
+#library(dplyr)
+# dataExpr、moduleColors、powerなどの変数が定義され、計算されていると仮定します
+# WGCNA関数を使用して、各モジュールのトップhub遺伝子を選択します
+hubs = chooseTopHubInEachModule(heliconius_data_t, colorh=dynamicColors, power=power, type="signed")
+# ネットワークのエッジとノード情報を抽出
+cyt = exportNetworkToCytoscape(TOM, edgeFile = "Network.edges.txt", nodeFile = "Network.nodes.txt", weighted = TRUE, threshold = 0.01, nodeNames = probes, nodeAttr = moduleColors)
+# エッジデータの処理と分析のための準備
+edgeData1 <- cyt$edgeData[,c(1,2,3)]
+edgeData2 <- cyt$edgeData[,c(2,1,3)]
+nodeattrib <- cyt$nodeData[,c(1,3)]
+colnames(nodeattrib) <- c("nodeName", "Module")
+colnames(edgeData1) <- c("Node1", "Node2", "Weight")
+colnames(edgeData2) <- c("Node1", "Node2", "Weight")
+edgeData <- rbind(edgeData1, edgeData2)
+edgeData$Module1 <- nodeattrib[match(edgeData$Node1, nodeattrib$nodeName), 2]
+edgeData$Module2 <- nodeattrib[match(edgeData$Node2, nodeattrib$nodeName), 2]
+edgeData <- edgeData[edgeData$Module1 == edgeData$Module2, c(1, 3, 4)]
+# 各ノードの総重量を計算
+nodeTotalWeight <- edgeData %>% group_by(Node1, Module1) %>% summarise(weight = sum(Weight))
+nodeTotalWeight <- nodeTotalWeight[with(nodeTotalWeight, order(Module1, -weight)), ]
+# 各モジュールのトップ20のノードを選択
+nodeTotalWeightTop20 = nodeTotalWeight %>% group_by(Module1) %>% top_n(20, weight)
